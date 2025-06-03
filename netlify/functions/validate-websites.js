@@ -19,7 +19,28 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    const websites = JSON.parse(event.body || '[]');
+    // Parse the incoming data - handle different formats
+    let websites = [];
+    const bodyData = JSON.parse(event.body || '[]');
+    
+    // Handle different data formats from n8n
+    if (Array.isArray(bodyData)) {
+      websites = bodyData;
+    } else if (bodyData.websites && Array.isArray(bodyData.websites)) {
+      websites = bodyData.websites;
+    } else if (typeof bodyData === 'object' && bodyData !== null) {
+      // If it's a single object, wrap it in an array
+      websites = [bodyData];
+    } else {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ 
+          error: 'Invalid data format', 
+          details: 'Expected array of lead objects',
+          received: typeof bodyData
+        })
+      };
+    }
     
     const validationPromises = websites.map(async (lead) => {
       let valid = false;
@@ -74,7 +95,11 @@ exports.handler = async (event, context) => {
   } catch (error) {
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'Validation failed', details: error.message })
+      body: JSON.stringify({ 
+        error: 'Validation failed', 
+        details: error.message,
+        stack: error.stack
+      })
     };
   }
 };
