@@ -1,10 +1,7 @@
 exports.handler = async (event, context) => {
   console.log('=== FUNCTION STARTED ===');
-  console.log('HTTP Method:', event.httpMethod);
   
-  // Handle CORS for browser requests
   if (event.httpMethod === 'OPTIONS') {
-    console.log('Handling CORS preflight');
     return {
       statusCode: 200,
       headers: {
@@ -16,7 +13,6 @@ exports.handler = async (event, context) => {
   }
 
   if (event.httpMethod !== 'POST') {
-    console.log('Method not allowed:', event.httpMethod);
     return {
       statusCode: 405,
       body: JSON.stringify({ error: 'Method not allowed' })
@@ -26,32 +22,42 @@ exports.handler = async (event, context) => {
   try {
     console.log('Raw body received:', event.body);
     
-    // Parse the incoming data - handle different formats
     let websites = [];
-    const bodyData = JSON.parse(event.body || '[]');
+    const bodyData = JSON.parse(event.body || '{}');
     
-    console.log('Parsed body data type:', typeof bodyData);
     console.log('Parsed body data:', JSON.stringify(bodyData, null, 2));
     
-    // Handle different data formats from n8n
-    if (Array.isArray(bodyData)) {
+    // Handle the specific n8n format with empty key containing JSON string
+    if (bodyData[""] && typeof bodyData[""] === 'string') {
+      console.log('Found n8n format with empty key containing JSON string');
+      try {
+        const parsedLeads = JSON.parse(bodyData[""]);
+        if (Array.isArray(parsedLeads)) {
+          websites = parsedLeads;
+          console.log('Successfully parsed', websites.length, 'leads from JSON string');
+        }
+      } catch (parseError) {
+        console.log('Error parsing JSON string:', parseError.message);
+      }
+    }
+    // Handle normal array format
+    else if (Array.isArray(bodyData)) {
       websites = bodyData;
-      console.log('Using array data directly, count:', websites.length);
-    } else if (bodyData.websites && Array.isArray(bodyData.websites)) {
+      console.log('Using direct array format, count:', websites.length);
+    }
+    // Handle websites property
+    else if (bodyData.websites && Array.isArray(bodyData.websites)) {
       websites = bodyData.websites;
       console.log('Using websites property, count:', websites.length);
-    } else if (typeof bodyData === 'object' && bodyData !== null) {
-      // If it's a single object, wrap it in an array
-      websites = [bodyData];
-      console.log('Wrapped single object in array');
-    } else {
-      console.log('Invalid data format received');
+    }
+    
+    if (websites.length === 0) {
+      console.log('No websites found to validate');
       return {
         statusCode: 400,
         body: JSON.stringify({ 
-          error: 'Invalid data format', 
-          details: 'Expected array of lead objects',
-          received: typeof bodyData
+          error: 'No valid leads found',
+          receivedFormat: typeof bodyData
         })
       };
     }
@@ -127,13 +133,11 @@ exports.handler = async (event, context) => {
     
   } catch (error) {
     console.log('Function error:', error.message);
-    console.log('Error stack:', error.stack);
     return {
       statusCode: 500,
       body: JSON.stringify({ 
         error: 'Validation failed', 
-        details: error.message,
-        stack: error.stack
+        details: error.message
       })
     };
   }
